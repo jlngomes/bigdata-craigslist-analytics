@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  spark-master:
+    image: bitnami/spark:3.5.0
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8080:8080" # Interface Web do Master
+      - "7077:7077" # Comunicação interna
+
+  spark-worker:
+    image: bitnami/spark:3.5.0
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G # Ajuste conforme sua RAM disponível
+      - SPARK_WORKER_CORES=2
+
+  jupyter:
+    image: jupyter/pyspark-notebook:latest
+    container_name: jupyter-spark
+    ports:
+      - "8888:8888" # Interface do Jupyter
+      - "4040:4040" # Spark UI (Monitoramento dos Jobs)
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./data:/home/jovyan/data # Onde você vai colocar o dataset de 1GB
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
