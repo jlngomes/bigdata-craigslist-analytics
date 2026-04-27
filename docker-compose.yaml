@@ -1,34 +1,42 @@
 version: '3.8'
 
 services:
-  spark-master:
-    image: bitnami/spark:3.5.0
-    container_name: spark-master
-    environment:
-      - SPARK_MODE=master
-    ports:
-      - "8080:8080" # Interface Web do Master
-      - "7077:7077" # Comunicação interna
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.pyspark
+    volumes:
+      - ./data:/home/jovyan/data
+      - ./scripts:/home/jovyan/scripts
+    command: python /home/jovyan/scripts/bronze.py
 
-  spark-worker:
-    image: bitnami/spark:3.5.0
-    container_name: spark-worker
+  transform_silver:
+    build:
+      context: .
+      dockerfile: Dockerfile.pyspark
     depends_on:
-      - spark-master
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=2G # Ajuste conforme sua RAM disponível
-      - SPARK_WORKER_CORES=2
+      ingest:
+        condition: service_completed_successfully
+    volumes:
+      - ./data:/home/jovyan/data
+      - ./scripts:/home/jovyan/scripts
+    # Este serviço roda o Spark para criar a camada Silver
+    command: python /home/jovyan/scripts/silver.py
 
   jupyter:
-    image: jupyter/pyspark-notebook:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.pyspark
     container_name: jupyter-spark
+    depends_on:
+      transform_silver:
+        condition: service_completed_successfully
     ports:
-      - "8888:8888" # Interface do Jupyter
-      - "4040:4040" # Spark UI (Monitoramento dos Jobs)
+      - "8888:8888"
+      - "4040:4040"
     volumes:
       - ./notebooks:/home/jovyan/work
-      - ./data:/home/jovyan/data # Onde você vai colocar o dataset de 1GB
+      - ./data:/home/jovyan/data
     environment:
       - JUPYTER_ENABLE_LAB=yes
+      - PYSPARK_SUBMIT_ARGS=--master local[*] pyspark-shell
